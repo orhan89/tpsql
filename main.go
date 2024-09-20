@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+type Tunnel interface {
+	Connect(string, int) error
+	Close() error
+	Flags()
+}
+
 type SSHTunnel struct {
 	localHost string
 	localPort int
@@ -86,10 +92,11 @@ func (s *SSHTunnel) Flags() {
 }
 
 func main() {
+	var tunnel Tunnel
 	localHost := "127.0.0.1"
 	localPort := 5432
 
-	tunnel := &SSHTunnel{
+	tunnel = &SSHTunnel{
 		localHost: localHost,
 		localPort: localPort,
 	}
@@ -102,6 +109,7 @@ func main() {
 	postgresPort := 5432
 
 	flag.Parse()
+
 	psqlArgs := flag.Args()
 
 	if i := slices.Index(psqlArgs, "--host"); i != -1 {
