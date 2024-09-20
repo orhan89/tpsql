@@ -26,8 +26,8 @@ type SSHTunnel struct {
 	cmd *exec.Cmd
 }
 
-func (s *SSHTunnel) Connect() error {
-	portForwardingAddress := fmt.Sprintf("%s:%d:%s:%d", s.localHost, s.localPort, s.postgresHost, s.postgresPort)
+func (s *SSHTunnel) Connect(postgresHost string, postgresPort int) error {
+	portForwardingAddress := fmt.Sprintf("%s:%d:%s:%d", s.localHost, s.localPort, postgresHost, postgresPort)
 	tunnelAddress := fmt.Sprintf("%s@%s", s.remoteUser, s.remoteHost)
 	log.Print(portForwardingAddress)
 	log.Print(tunnelAddress)
@@ -80,12 +80,24 @@ func (s *SSHTunnel) Close() error {
 	return nil
 }
 
+func (s *SSHTunnel) Flags() {
+	flag.StringVar(&s.remoteUser, "sshUser", "root", "(ssh) tunnel user")
+	flag.StringVar(&s.remoteHost, "sshHost", "127.0.0.1", "(ssh) tunnel host")
+}
+
 func main() {
 	localHost := "127.0.0.1"
 	localPort := 5432
+
+	tunnel := &SSHTunnel{
+		localHost: localHost,
+		localPort: localPort,
+	}
+
+	tunnel.Flags()
+
 	// tunnelType := flag.String("tunnelType", "ssh", "the type of the tunnel (default=ssh)")
-	tunnelHost := flag.String("sshHost", "127.0.0.1", "(ssh) tunnel host")
-	tunnelUser := flag.String("sshUser", "root", "(ssh) tunnel user")
+
 	postgresHost := "127.0.0.1"
 	postgresPort := 5432
 
@@ -114,16 +126,8 @@ func main() {
 
 	psqlArgs = slices.Concat([]string{"--port", strconv.Itoa(localPort)}, psqlArgs)
 
-	tunnel := &SSHTunnel{
-		localHost: localHost,
-		localPort: localPort,
-		remoteHost: *tunnelHost,
-		remoteUser: *tunnelUser,
-		postgresHost: postgresHost,
-		postgresPort: postgresPort,
-	}
 
-	err := tunnel.Connect()
+	err := tunnel.Connect(postgresHost, postgresPort)
 	if err != nil {
 		panic("error connecting to tunnel")
 	}
