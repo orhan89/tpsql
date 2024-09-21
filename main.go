@@ -125,25 +125,22 @@ func (s *SSHTunnel) Connect(args []string) error {
 
 	if i := slices.Index(args, "--host"); i != -1 {
 		postgresHost = args[i+1]
-		log.Printf("Server Host: %s", postgresHost)
 	}
 
 	postgresPort := 5432
 
 	if i := slices.Index(args, "--port"); i != -1 {
-		postgresPort, err := strconv.Atoi(args[i+1])
-		if err != nil {
+		if v, err := strconv.Atoi(args[i+1]); err != nil {
 			log.Fatal("Failed in parsing server port")
 			return err
+		} else {
+			postgresPort = v
 		}
-		log.Printf("Server Port: %d", postgresPort)
 	}
 
 	portForwardingAddress := fmt.Sprintf("%s:%d:%s:%d", localHost, localPort, postgresHost, postgresPort)
-	log.Print(portForwardingAddress)
 
 	tunnelAddress := fmt.Sprintf("%s@%s", s.remoteUser, s.remoteHost)
-	log.Print(tunnelAddress)
 
 	log.Print("Searching for ssh binary")
 	_, err := exec.LookPath("ssh")
@@ -178,43 +175,35 @@ func (s *SSHTunnel) Flags() {
 	flag.StringVar(&s.remoteHost, "sshHost", "127.0.0.1", "(ssh) tunnel host")
 }
 
+var tunnelMap = map[string]Tunnel{
+	"ssh": &SSHTunnel{},
+	"k8s": &K8sTunnel{},
+}
+
+var tunnel Tunnel
+
 func main() {
-	var tunnel Tunnel
-
-	sshTunnel := &SSHTunnel{}
-	sshTunnel.Flags()
-
-	k8sTunnel := &K8sTunnel{}
-	k8sTunnel.Flags()
-
 	tunnelType := flag.String("tunnelType", "ssh", "the type of the tunnel (default=ssh)")
+
+	for _, v := range tunnelMap {
+		v.Flags()
+	}
 
 	flag.Parse()
 
-	if *tunnelType == "ssh" {
-		tunnel = sshTunnel
-	} else if *tunnelType == "k8s" {
-		tunnel = k8sTunnel
+	tunnel, ok := tunnelMap[*tunnelType]
+	if !ok {
+		log.Printf("There is no implementation for %s tunnel type", *tunnelType)
+		return
 	}
 
 	psqlArgs := flag.Args()
 
-	if i := slices.Index(psqlArgs, "--host"); i != -1 {
-		psqlArgs = slices.Delete(psqlArgs, i, i+2)
-	}
-
-	psqlArgs = slices.Concat([]string{"--host", localHost}, psqlArgs)
-
-	if i := slices.Index(psqlArgs, "--port"); i != -1 {
-		psqlArgs = slices.Delete(psqlArgs, i, i+2)
-	}
-
-	psqlArgs = slices.Concat([]string{"--port", strconv.Itoa(localPort)}, psqlArgs)
-
-	log.Print("Connecting to tunnel")
+	log.Printf("Connecting to %s tunnel", *tunnelType)
 	err := tunnel.Connect(psqlArgs)
 	if err != nil {
-		panic("error connecting to tunnel")
+		log.Printf("Error connecting to tunnel: %s", err)
+		return
 	}
 	
 	defer tunnel.Close()
@@ -247,7 +236,20 @@ func main() {
 		return
 	}
 
-	log.Print("Start Psql")
+	if i := slices.Index(psqlArgs, "--host"); i != -1 {
+		psqlArgs = slices.Delete(psqlArgs, i, i+2)
+	}
+
+	psqlArgs = slices.Concat([]string{"--host", localHost}, psqlArgs)
+
+	if i := slices.Index(psqlArgs, "--port"); i != -1 {
+		psqlArgs = slices.Delete(psqlArgs, i, i+2)
+	}
+
+	psqlArgs = slices.Concat([]string{"--port", strconv.Itoa(localPort)}, psqlArgs)
+
+
+	log.Print("Start psql")
 	log.Printf("Arguments for psql command: %v", psqlArgs)
 	cmdPsql := exec.Command("psql", psqlArgs...)
 	cmdPsql.Stdin = os.Stdin
