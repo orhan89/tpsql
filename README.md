@@ -12,6 +12,26 @@
 - `psql` (PostgreSQL client)
 - `ssh` (SSH client) if you are willing to use SSH tunnel
 
+## Installation
+
+- Download latest version of `tpsql` from github release.
+
+```bash
+wget https://github.com/orhan89/tpsql/releases/download/v0.1.0/tpsql_Linux_x86_64.tar.gz
+```
+
+- Extract the downloaded archive
+
+```bash
+tar -xzf tpsql_Linux_x86_64.tar.gz
+```
+
+- Move `tpsql` binary into PATH directory
+
+```bash
+mv tpsql /usr/local/bin/
+```
+
 ## Usage
 
 To use `tpsql` you need to select the tunnel type using `--tunnel-type` parameter (default to `ssh`) along with the selected tunnel type specific arguments, followed by arguments for the psql separated by `--`
