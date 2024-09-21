@@ -4,7 +4,7 @@
 
 ## Features
 
-- Connect to PostgreSQL databases via various mechanism. Currently supports SSH tunnel and kubernetes port-forward.
+- Connect to PostgreSQL databases via various tunnels mechanism. Currently supports SSH tunnel and kubernetes port-forward.
 - Simple and familiar interface to use alongside the psql command-line tool.
 
 ### Prerequisites
