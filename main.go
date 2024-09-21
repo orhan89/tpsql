@@ -140,8 +140,9 @@ func (s *SSHTunnel) Connect(args []string) error {
 	}
 
 	portForwardingAddress := fmt.Sprintf("%s:%d:%s:%d", localHost, localPort, postgresHost, postgresPort)
-	tunnelAddress := fmt.Sprintf("%s@%s", s.remoteUser, s.remoteHost)
 	log.Print(portForwardingAddress)
+
+	tunnelAddress := fmt.Sprintf("%s@%s", s.remoteUser, s.remoteHost)
 	log.Print(tunnelAddress)
 
 	log.Print("Searching for ssh binary")
@@ -156,7 +157,7 @@ func (s *SSHTunnel) Connect(args []string) error {
 	s.cmd.Stdout = os.Stdout
 	s.cmd.Stderr = os.Stderr
 
-	log.Print("Opening tunnel")
+	log.Print("Opening SSH tunnel")
 	err = s.cmd.Start()
 	if err != nil {
 		log.Print(err)
@@ -221,8 +222,8 @@ func main() {
 	log.Print("Waiting until tunnel is open")
 
 	address := net.JoinHostPort(localHost, strconv.Itoa(localPort))
-
 	connected := false
+
 	for i := 0; i < 10; i++ {
 		_, err = net.Dial("tcp", address)
 		if err == nil {
