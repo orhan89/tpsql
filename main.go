@@ -50,16 +50,16 @@ func (s *K8sTunnel) Connect(args []string) error {
 
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	roundTripper, upgrader, err := spdy.RoundTripperFor(config)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	hostURL, err := url.Parse(config.Host)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	hostURL.Path = path.Join(
@@ -102,6 +102,7 @@ func (s *K8sTunnel) Connect(args []string) error {
 func (s *K8sTunnel) Close() error {
 	log.Print("Closing PortForward")
 	close(s.stopChan)
+
 	return nil
 }
 
