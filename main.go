@@ -23,24 +23,26 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
+const localHost = "127.0.0.1"
+const localPort = 5432
+
 type Tunnel interface {
-	Connect(string, int) error
+	Connect([]string) error
 	Close() error
 	Flags()
 }
 
 type K8sTunnel struct {
-	localHost string
-	localPort int
 	namespace string
 	resourceType string
 	resourceName string
 	remotePort int
+
 	readyChan chan struct{}
 	stopChan chan struct{}
 }
 
-func (s *K8sTunnel) Connect(postgresHost string, postgresPort int) error {
+func (s *K8sTunnel) Connect(args []string) error {
 	var kubeconfig string
 
 	home := homedir.HomeDir()
@@ -59,19 +61,20 @@ func (s *K8sTunnel) Connect(postgresHost string, postgresPort int) error {
 	if err != nil {
 		panic(err)
 	}
+
 	hostURL.Path = path.Join(
 		"api", "v1",
 		"namespaces", s.namespace,
 		s.resourceType, s.resourceName,
 		"portforward",
 	)
+
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, hostURL)
 
 	s.stopChan, s.readyChan = make(chan struct{}, 1), make(chan struct{}, 1)
 	out, errOut := new(bytes.Buffer), new(bytes.Buffer)
 
-	s.localPort = 5432
-	ports := []string{fmt.Sprintf("%d:%d", s.localPort, s.remotePort)}
+	ports := []string{fmt.Sprintf("%d:%d", localPort, s.remotePort)}
 	forwarder, err := portforward.New(dialer, ports, s.stopChan, s.readyChan, out, errOut)
 	if err != nil {
 		panic(err)
@@ -110,19 +113,32 @@ func (s *K8sTunnel) Flags() {
 }
 
 type SSHTunnel struct {
-	localHost string
-	localPort int
 	remoteHost string
-	remotePort int
 	remoteUser string
-	postgresHost string
-	postgresPort int
 
 	cmd *exec.Cmd
 }
 
-func (s *SSHTunnel) Connect(postgresHost string, postgresPort int) error {
-	portForwardingAddress := fmt.Sprintf("%s:%d:%s:%d", s.localHost, s.localPort, postgresHost, postgresPort)
+func (s *SSHTunnel) Connect(args []string) error {
+	postgresHost := "127.0.0.1"
+
+	if i := slices.Index(args, "--host"); i != -1 {
+		postgresHost = args[i+1]
+		log.Printf("Server Host: %s", postgresHost)
+	}
+
+	postgresPort := 5432
+
+	if i := slices.Index(args, "--port"); i != -1 {
+		postgresPort, err := strconv.Atoi(args[i+1])
+		if err != nil {
+			log.Fatal("Failed in parsing server port")
+			return err
+		}
+		log.Printf("Server Port: %d", postgresPort)
+	}
+
+	portForwardingAddress := fmt.Sprintf("%s:%d:%s:%d", localHost, localPort, postgresHost, postgresPort)
 	tunnelAddress := fmt.Sprintf("%s@%s", s.remoteUser, s.remoteHost)
 	log.Print(portForwardingAddress)
 	log.Print(tunnelAddress)
@@ -151,6 +167,7 @@ func (s *SSHTunnel) Connect(postgresHost string, postgresPort int) error {
 
 func (s *SSHTunnel) Close() error {
 	s.cmd.Process.Signal(syscall.SIGTERM)
+
 	return nil
 }
 
@@ -161,22 +178,14 @@ func (s *SSHTunnel) Flags() {
 
 func main() {
 	var tunnel Tunnel
-	localHost := "127.0.0.1"
-	localPort := 5432
 
-	sshTunnel := &SSHTunnel{
-		localHost: localHost,
-		localPort: localPort,
-	}
+	sshTunnel := &SSHTunnel{}
 	sshTunnel.Flags()
 
 	k8sTunnel := &K8sTunnel{}
 	k8sTunnel.Flags()
 
 	tunnelType := flag.String("tunnelType", "ssh", "the type of the tunnel (default=ssh)")
-
-	postgresHost := "127.0.0.1"
-	postgresPort := 5432
 
 	flag.Parse()
 
@@ -189,30 +198,19 @@ func main() {
 	psqlArgs := flag.Args()
 
 	if i := slices.Index(psqlArgs, "--host"); i != -1 {
-		postgresHost = psqlArgs[i+1]
-		log.Printf("Server Host: %s", postgresHost)
-
 		psqlArgs = slices.Delete(psqlArgs, i, i+2)
 	}
 
 	psqlArgs = slices.Concat([]string{"--host", localHost}, psqlArgs)
 
 	if i := slices.Index(psqlArgs, "--port"); i != -1 {
-		postgresPort, err := strconv.Atoi(psqlArgs[i+1])
-		if err != nil {
-			log.Print("Failed in parsing server port")
-			return
-		}
-		log.Printf("Server Port: %d", postgresPort)
-
 		psqlArgs = slices.Delete(psqlArgs, i, i+2)
 	}
 
 	psqlArgs = slices.Concat([]string{"--port", strconv.Itoa(localPort)}, psqlArgs)
 
-
 	log.Print("Connecting to tunnel")
-	err := tunnel.Connect(postgresHost, postgresPort)
+	err := tunnel.Connect(psqlArgs)
 	if err != nil {
 		panic("error connecting to tunnel")
 	}
